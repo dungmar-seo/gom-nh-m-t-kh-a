@@ -35,15 +35,18 @@ if 'tool1_output_df' not in st.session_state:
 # ================= HÀM XỬ LÝ CÔNG CỤ 1 (Semantic Filter) =================
 @st.cache_resource
 def load_semantic_model():
+    # Sử dụng bản MiniLM nhẹ để chạy mượt trên Cloud
     return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 
 def tool1_semantic_clustering(df, target_seeds, noise_seeds):
     df.columns = df.columns.astype(str).str.strip()
-    col_kw = next((c for c in df.columns if any(k in c.lower() for k in ['từ khóa', 'keyword', 'từ khoá'])), None)
-    col_vol = next((c for c in df.columns if 'volume' in c.lower()), None)
+    # Tìm cột Keyword linh hoạt hơn
+    col_kw = next((c for c in df.columns if any(k in c.lower() for k in ['từ khóa', 'keyword', 'từ khoá', 'search query'])), None)
+    # Tìm cột Volume linh hoạt hơn
+    col_vol = next((c for c in df.columns if any(k in c.lower() for k in ['volume', 'search volume', 'lượng tìm kiếm'])), None)
 
     if not col_kw or not col_vol:
-        st.error("❌ Không tìm thấy cột 'Từ khóa' hoặc 'Volume'. Vui lòng kiểm tra lại file.")
+        st.error(f"❌ Không tìm thấy cột 'Từ khóa' hoặc 'Volume'. Các cột hiện có: {list(df.columns)}")
         return None, None
 
     df = df.rename(columns={col_kw: 'Keyword', col_vol: 'Volume'})
@@ -61,8 +64,7 @@ def tool1_semantic_clustering(df, target_seeds, noise_seeds):
         target_scores = util.cos_sim(kw_vecs, target_vecs).max(dim=1).values.tolist()
         noise_scores = util.cos_sim(kw_vecs, noise_vecs).max(dim=1).values.tolist()
 
-        clean_indices = []
-        trash_indices = []
+        clean_indices, trash_indices = [], []
         margin = 0.05
         for i in range(len(keywords)):
             if target_scores[i] > (noise_scores[i] + margin):
@@ -75,7 +77,7 @@ def tool1_semantic_clustering(df, target_seeds, noise_seeds):
         clean_kw_vecs = kw_vecs[clean_indices]
 
     if len(df_clean) == 0:
-        st.warning("Không có từ khóa nào phù hợp với ngành mục tiêu.")
+        st.warning("Không có từ khóa nào phù hợp với ngành mục tiêu sau khi lọc.")
         return None, None
 
     with st.spinner("Đang gom nhóm sơ bộ..."):
@@ -134,96 +136,17 @@ def tool2_gemini_clustering(df, api_key):
 
         input_data_str = "\n".join([f"- {item['Từ Khóa']} (Vol: {item['Volume']})" for item in batch])
         
-        # Prompt gọn nhẹ để tránh lỗi ngắt quãng chuỗi
-        prompt = "Hãy đóng vai chuyên gia SEO. Gom nhóm các từ khóa sau thành bài viết.\n"
-        prompt += "Luật: Cùng mục đích tìm kiếm thì vào 1 nhóm. Không được sửa từ khóa.\n"
-        prompt += f"Danh sách:\n{input_data_str}\n"
-        prompt += "Trả về JSON array duy nhất: "
-        prompt += '[{"intent": "Dạng bài", "main_keyword": "từ chính", "main_volume": 100, "sub_keywords": [{"keyword": "từ phụ", "volume": 10}]}]'
+        # Sửa lỗi Syntax: Nối chuỗi an toàn
+        prompt = (
+            "Hãy đóng vai chuyên gia SEO. Gom nhóm các từ khóa sau thành bài viết.\n"
+            "Luật: Cùng mục đích tìm kiếm thì vào 1 nhóm. Không được sửa từ khóa.\n"
+            f"Danh sách:\n{input_data_str}\n"
+            "Trả về JSON array duy nhất: "
+            '[{"intent": "Dạng bài", "main_keyword": "từ chính", "main_volume": 100, "sub_keywords": [{"keyword": "từ phụ", "volume": 10}]}]'
+        )
 
         for attempt in range(3):
             try:
                 response = model.generate_content(prompt)
                 txt = response.text.strip()
-                if "```json" in txt:
-                    txt = txt.split("```json")[1].split("```")[0]
-                elif "```" in txt:
-                    txt = txt.split("```")[1].split("```")[0]
-                
-                batch_articles = json.loads(txt.strip())
-                all_articles.extend(batch_articles)
-                time.sleep(4) 
-                break
-            except:
-                time.sleep(5)
-                    
-    final_rows = []
-    for art in all_articles:
-        m_kw = art.get("main_keyword", "N/A")
-        m_vol = art.get("main_volume", 0)
-        intent = art.get("intent", "N/A")
-        subs = art.get("sub_keywords", [])
-        sub_total = sum([s.get("volume", 0) for s in subs])
-        
-        final_rows.append({
-            'Intent': intent, 'Chủ đề chính': m_kw, 'Loại': 'Chính', 
-            'Từ khóa': m_kw, 'Volume': m_vol, 'Tổng Vol Bài': m_vol + sub_total
-        })
-        for s in subs:
-            final_rows.append({
-                'Intent': intent, 'Chủ đề chính': m_kw, 'Loại': 'Phụ', 
-                'Từ khóa': s.get("keyword", ""), 'Volume': s.get("volume", 0), 'Tổng Vol Bài': None
-            })
-            
-    return pd.DataFrame(final_rows)
-
-# ================= GIAO DIỆN CHÍNH =================
-st.sidebar.title("Cấu hình công cụ")
-mode = st.sidebar.selectbox("Chọn chức năng:", ["Tool 1: Lọc rác & Gom sơ bộ", "Tool 2: Gemini Mapping"])
-
-st.sidebar.markdown("---")
-user_api = st.sidebar.text_input("Nhập Gemini API Key:", type="password")
-api_to_use = user_api if user_api else "AIzaSyBSPo-XImF7uXzZxpRTclt6-hSRxuS-U5g"
-
-if mode == "Tool 1: Lọc rác & Gom sơ bộ":
-    st.subheader("1️⃣ Lọc từ khóa & Loại bỏ rác ngữ nghĩa")
-    c1, c2 = st.columns(2)
-    with c1: t_seeds = st.text_area("Hạt giống NGÀNH (Mục tiêu):", "kế toán, hóa đơn")
-    with c2: n_seeds = st.text_area("Hạt giống RÁC (Loại bỏ):", "học sinh, giải trí")
-    
-    file1 = st.file_uploader("Tải lên file từ khóa (CSV/Excel):", type=['csv', 'xlsx'])
-    if file1 and st.button("Bắt đầu chạy Tool 1"):
-        try:
-            df_raw = pd.read_csv(file1) if file1.name.endswith('.csv') else pd.read_excel(file1)
-            res_clean, res_trash = tool1_semantic_clustering(df_raw, t_seeds.split(","), n_seeds.split(","))
-            if res_clean is not None:
-                st.session_state.tool1_output_df = res_clean
-                st.success("Xử lý xong! Dữ liệu đã được lưu vào bộ nhớ tạm.")
-                out1 = io.BytesIO()
-                res_clean.to_excel(out1, index=False)
-                st.download_button("📥 Tải kết quả Tool 1", out1.getvalue(), "Ket_qua_Tool1.xlsx")
-        except Exception as e:
-            st.error(f"Lỗi: {e}")
-
-elif mode == "Tool 2: Gemini Mapping":
-    st.subheader("2️⃣ Gom nhóm chuyên sâu bằng AI")
-    input_source = st.radio("Nguồn dữ liệu:", ["Kế thừa từ Tool 1", "Tải file mới"])
-    
-    df_to_process = None
-    if input_source == "Kế thừa từ Tool 1":
-        df_to_process = st.session_state.tool1_output_df
-        if df_to_process is None: st.warning("Hãy chạy Tool 1 trước.")
-    else:
-        file2 = st.file_uploader("Tải file từ khóa mới:", type=['csv', 'xlsx'])
-        if file2: df_to_process = pd.read_csv(file2) if file2.name.endswith('.csv') else pd.read_excel(file2)
-
-    if df_to_process is not None and st.button("Chạy Gemini Mapping"):
-        try:
-            final_res = tool2_gemini_clustering(df_to_process, api_to_use)
-            if final_res is not None:
-                st.dataframe(final_res.head(20))
-                out2 = io.BytesIO()
-                final_res.to_excel(out2, index=False)
-                st.download_button("📥 Tải Content Map", out2.getvalue(), "Final_Content_Map.xlsx")
-        except Exception as e:
-            st.error(f"Lỗi AI: {e}")
+                if "
