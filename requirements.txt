@@ -1,1 +1,6 @@
-streamlit pandas openpyxl google-generativeai sentence-transformers scikit-learn
+streamlit
+pandas
+openpyxl
+google-generativeai
+sentence-transformers
+scikit-learn
