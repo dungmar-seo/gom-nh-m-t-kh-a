@@ -136,7 +136,7 @@ def tool2_gemini_clustering(df, api_key):
 
         input_data_str = "\n".join([f"- {item['Từ Khóa']} (Vol: {item['Volume']})" for item in batch])
         
-        # Sửa lỗi Syntax: Nối chuỗi an toàn
+        # Prompt được thiết kế để AI trả về JSON chuẩn
         prompt = (
             "Hãy đóng vai chuyên gia SEO. Gom nhóm các từ khóa sau thành bài viết.\n"
             "Luật: Cùng mục đích tìm kiếm thì vào 1 nhóm. Không được sửa từ khóa.\n"
@@ -149,4 +149,116 @@ def tool2_gemini_clustering(df, api_key):
             try:
                 response = model.generate_content(prompt)
                 txt = response.text.strip()
-                if "
+                # Làm sạch dữ liệu JSON từ Markdown code blocks nếu có
+                if "```json" in txt:
+                    txt = txt.split("```json")[1].split("```")[0]
+                elif "```" in txt:
+                    txt = txt.split("```")[1].split("```")[0]
+                
+                batch_articles = json.loads(txt.strip())
+                all_articles.extend(batch_articles)
+                time.sleep(4) 
+                break
+            except Exception as e:
+                if "429" in str(e):
+                    time.sleep(30)
+                else:
+                    time.sleep(5)
+                    
+    final_rows = []
+    for art in all_articles:
+        m_kw = art.get("main_keyword", "N/A")
+        m_vol = art.get("main_volume", 0)
+        intent = art.get("intent", "N/A")
+        subs = art.get("sub_keywords", [])
+        sub_total = sum([s.get("volume", 0) for s in subs])
+        
+        final_rows.append({
+            'Intent': intent, 'Chủ đề chính': m_kw, 'Loại': 'Chính', 
+            'Từ khóa': m_kw, 'Volume': m_vol, 'Tổng Vol Bài': m_vol + sub_total
+        })
+        for s in subs:
+            final_rows.append({
+                'Intent': intent, 'Chủ đề chính': m_kw, 'Loại': 'Phụ', 
+                'Từ khóa': s.get("keyword", ""), 'Volume': s.get("volume", 0), 'Tổng Vol Bài': None
+            })
+            
+    return pd.DataFrame(final_rows)
+
+# ================= GIAO DIỆN CHÍNH =================
+st.sidebar.title("Cấu hình công cụ")
+mode = st.sidebar.selectbox("Chọn chức năng:", ["Tool 1: Lọc rác & Gom sơ bộ", "Tool 2: Gemini Mapping"])
+
+st.sidebar.markdown("---")
+user_api = st.sidebar.text_input("Nhập Gemini API Key:", type="password")
+api_to_use = user_api if user_api else "AIzaSyBSPo-XImF7uXzZxpRTclt6-hSRxuS-U5g"
+
+if mode == "Tool 1: Lọc rác & Gom sơ bộ":
+    st.subheader("1️⃣ Lọc từ khóa & Loại bỏ rác ngữ nghĩa")
+    c1, c2 = st.columns(2)
+    with c1: t_seeds = st.text_area("Hạt giống NGÀNH (Mục tiêu):", "thuế, kế toán, hóa đơn")
+    with c2: n_seeds = st.text_area("Hạt giống RÁC (Loại bỏ):", "thuê, cho thuê, phim, ảnh, địa điểm")
+    
+    file1 = st.file_uploader("Tải lên file từ khóa (CSV/Excel):", type=['csv', 'xlsx'])
+    if file1 and st.button("Bắt đầu chạy Tool 1"):
+        try:
+            if file1.name.endswith('.csv'):
+                # Xử lý nhiều định dạng mã hóa (Encoding) để tránh lỗi UTF-8
+                encodings = ['utf-8-sig', 'utf-16', 'latin1', 'cp1252']
+                df_raw = None
+                for enc in encodings:
+                    try:
+                        file1.seek(0)
+                        df_raw = pd.read_csv(file1, encoding=enc)
+                        break
+                    except:
+                        continue
+                if df_raw is None:
+                    st.error("❌ Không thể đọc file CSV. Vui lòng kiểm tra định dạng hoặc lưu lại file dưới dạng CSV UTF-8.")
+            else:
+                df_raw = pd.read_excel(file1)
+            
+            if df_raw is not None:
+                res_clean, res_trash = tool1_semantic_clustering(df_raw, t_seeds.split(","), n_seeds.split(","))
+                if res_clean is not None:
+                    st.session_state.tool1_output_df = res_clean
+                    st.success("Xử lý xong! Dữ liệu đã được lưu vào bộ nhớ tạm.")
+                    out1 = io.BytesIO()
+                    res_clean.to_excel(out1, index=False)
+                    st.download_button("📥 Tải kết quả Tool 1", out1.getvalue(), "Ket_qua_Tool1.xlsx")
+        except Exception as e:
+            st.error(f"Lỗi hệ thống: {e}")
+
+elif mode == "Tool 2: Gemini Mapping":
+    st.subheader("2️⃣ Gom nhóm chuyên sâu bằng AI")
+    input_source = st.radio("Nguồn dữ liệu:", ["Kế thừa từ Tool 1", "Tải file mới"])
+    
+    df_to_process = None
+    if input_source == "Kế thừa từ Tool 1":
+        df_to_process = st.session_state.tool1_output_df
+        if df_to_process is None: 
+            st.warning("Hãy chạy Tool 1 trước để có dữ liệu sạch.")
+    else:
+        file2 = st.file_uploader("Tải file từ khóa mới:", type=['csv', 'xlsx'])
+        if file2:
+            if file2.name.endswith('.csv'):
+                encodings = ['utf-8-sig', 'utf-16', 'latin1', 'cp1252']
+                for enc in encodings:
+                    try:
+                        file2.seek(0)
+                        df_to_process = pd.read_csv(file2, encoding=enc)
+                        break
+                    except: continue
+            else:
+                df_to_process = pd.read_excel(file2)
+
+    if df_to_process is not None and st.button("Chạy Gemini Mapping"):
+        try:
+            final_res = tool2_gemini_clustering(df_to_process, api_to_use)
+            if final_res is not None:
+                st.dataframe(final_res.head(20))
+                out2 = io.BytesIO()
+                final_res.to_excel(out2, index=False)
+                st.download_button("📥 Tải Content Map", out2.getvalue(), "Final_Content_Map.xlsx")
+        except Exception as e:
+            st.error(f"Lỗi AI: {e}")
