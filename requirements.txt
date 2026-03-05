@@ -1,0 +1,1 @@
+streamlit pandas openpyxl google-generativeai sentence-transformers scikit-learn torch
