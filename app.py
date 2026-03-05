@@ -10,23 +10,23 @@ import io
 import os
 import warnings
 
-# Tắt cảnh báo để giao diện sạch sẽ hơn
+# Tắt các cảnh báo để giao diện sạch sẽ
 warnings.filterwarnings("ignore")
 
 # ================= CẤU HÌNH TRANG =================
 st.set_page_config(page_title="SEO Clustering Tool", layout="wide", page_icon="🚀")
 
-# CSS tùy chỉnh để làm giao diện chuyên nghiệp hơn
+# Giao diện CSS tùy chỉnh
 st.markdown("""
     <style>
     .main { background-color: #f5f7f9; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #FF4B4B; color: white; }
-    .stDownloadButton>button { width: 100%; border-radius: 5px; background-color: #008CBA; color: white; }
+    .stButton>button { width: 100%; border-radius: 8px; height: 3em; background-color: #FF4B4B; color: white; font-weight: bold; }
+    .stDownloadButton>button { width: 100%; border-radius: 8px; background-color: #008CBA; color: white; }
     </style>
     """, unsafe_allow_stdio=True)
 
 st.title("🚀 Hệ Thống SEO: Lọc & Gom Nhóm Thông Minh")
-st.info("Công cụ tích hợp: Lọc rác ngữ nghĩa (Tool 1) và Mapping Content bằng Gemini AI (Tool 2)")
+st.info("Quy trình: Lọc rác ngữ nghĩa (Tool 1) → Mapping Content chuyên sâu bằng AI (Tool 2)")
 
 # Khởi tạo bộ nhớ tạm để chuyển dữ liệu giữa 2 công cụ
 if 'tool1_output_df' not in st.session_state:
@@ -41,11 +41,11 @@ def load_semantic_model():
 def tool1_semantic_clustering(df, target_seeds, noise_seeds):
     # Chuẩn hóa tên cột
     df.columns = df.columns.astype(str).str.strip()
-    col_kw = next((c for c in df.columns if 'từ khóa' in c.lower() or 'keyword' in c.lower()), None)
+    col_kw = next((c for c in df.columns if any(k in c.lower() for k in ['từ khóa', 'keyword', 'từ khoá'])), None)
     col_vol = next((c for c in df.columns if 'volume' in c.lower()), None)
 
     if not col_kw or not col_vol:
-        st.error("❌ Lỗi: File của bạn thiếu cột 'Keyword' hoặc 'Volume'.")
+        st.error("❌ Không tìm thấy cột 'Từ khóa' hoặc 'Volume'. Vui lòng kiểm tra lại file.")
         return None, None
 
     df = df.rename(columns={col_kw: 'Keyword', col_vol: 'Volume'})
@@ -55,16 +55,17 @@ def tool1_semantic_clustering(df, target_seeds, noise_seeds):
 
     model = load_semantic_model()
     
-    with st.spinner("AI đang phân tích ngữ nghĩa để loại bỏ từ khóa rác..."):
+    with st.spinner("AI đang lọc rác ngữ nghĩa..."):
         kw_vecs = model.encode(keywords, batch_size=32, convert_to_tensor=True)
         target_vecs = model.encode(target_seeds, convert_to_tensor=True)
         noise_vecs = model.encode(noise_seeds, convert_to_tensor=True)
 
-        # Tính toán độ tương đồng Cosine
+        # Tính toán độ tương đồng
         target_scores = util.cos_sim(kw_vecs, target_vecs).max(dim=1).values.tolist()
         noise_scores = util.cos_sim(kw_vecs, noise_vecs).max(dim=1).values.tolist()
 
-        clean_indices, trash_indices = [], []
+        clean_indices = []
+        trash_indices = []
         margin = 0.05
         for i in range(len(keywords)):
             if target_scores[i] > (noise_scores[i] + margin):
@@ -77,10 +78,10 @@ def tool1_semantic_clustering(df, target_seeds, noise_seeds):
         clean_kw_vecs = kw_vecs[clean_indices]
 
     if len(df_clean) == 0:
-        st.warning("Kết quả trống: Không tìm thấy từ khóa nào khớp với chủ đề mục tiêu.")
+        st.warning("Không có từ khóa nào phù hợp với ngành mục tiêu.")
         return None, None
 
-    with st.spinner("Đang gom nhóm các từ khóa đồng nghĩa..."):
+    with st.spinner("Đang gom nhóm sơ bộ..."):
         cluster_model = AgglomerativeClustering(n_clusters=None, distance_threshold=0.35, metric='cosine', linkage='average')
         df_clean['Cluster_ID'] = cluster_model.fit_predict(clean_kw_vecs.cpu().numpy())
 
@@ -109,21 +110,18 @@ def tool2_gemini_clustering(df, api_key):
     genai.configure(api_key=api_key)
     
     df.columns = df.columns.astype(str).str.strip()
-    col_kw = next((c for c in df.columns if 'từ khóa' in c.lower() or 'keyword' in c.lower()), None)
+    col_kw = next((c for c in df.columns if any(k in c.lower() for k in ['từ khóa', 'keyword', 'từ khoá'])), None)
     col_vol = next((c for c in df.columns if 'volume' in c.lower()), None)
-
-    if not col_kw:
-        st.error("Không tìm thấy cột chứa từ khóa.")
-        return None
 
     df = df.rename(columns={col_kw: 'Từ Khóa', col_vol: 'Volume' if col_vol else 'Volume_Alt'})
     if 'Volume' not in df.columns: df['Volume'] = 0
     df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce').fillna(0)
     
     keywords_data = df[['Từ Khóa', 'Volume']].to_dict('records')
-    BATCH_SIZE = 70 
+    BATCH_SIZE = 70
     all_articles = []
     
+    # Sử dụng model flash để đạt tốc độ cao
     model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"temperature": 0.1})
     
     total_kw = len(keywords_data)
@@ -140,22 +138,18 @@ def tool2_gemini_clustering(df, api_key):
 
         input_data_str = "\n".join([f"- {item['Từ Khóa']} (Vol: {item['Volume']})" for item in batch])
         
-        prompt = f"""Bạn là Trưởng phòng SEO. Gom nhóm từ khóa sau thành các Bài viết.
-LUẬT:
-1. Cùng URL: Chỉ gom nếu người dùng muốn đọc cùng 1 bài.
-2. Không gom bừa: Khác ý nghĩa phải tách bài.
-3. Giữ nguyên: Không sửa từ khóa, không bỏ Volume.
-
-DANH SÁCH:
+        # Prompt được tối ưu để tránh lỗi ngắt quãng chuỗi
+        prompt = f"""Hãy đóng vai chuyên gia SEO. Gom nhóm các từ khóa sau thành bài viết.
+Luật: Cùng mục đích tìm kiếm thì vào 1 nhóm. Không được sửa từ khóa.
+Danh sách:
 {input_data_str}
-
-OUTPUT: JSON array duy nhất.
+Trả về định dạng JSON array duy nhất:
 [
   {{
-    "intent": "Định nghĩa/Hướng dẫn/Review",
+    "intent": "Loại bài",
     "main_keyword": "từ khóa chính",
-    "main_volume": 1000,
-    "sub_keywords": [{{"keyword": "từ phụ", "volume": 100}}]
+    "main_volume": 100,
+    "sub_keywords": [{{"keyword": "từ phụ", "volume": 10}}]
   }}
 ]"""
 
@@ -163,4 +157,89 @@ OUTPUT: JSON array duy nhất.
             try:
                 response = model.generate_content(prompt)
                 txt = response.text.strip()
-                if "
+                if "```json" in txt:
+                    txt = txt.split("```json")[1].split("```")[0]
+                elif "```" in txt:
+                    txt = txt.split("```")[1].split("```")[0]
+                
+                batch_articles = json.loads(txt.strip())
+                all_articles.extend(batch_articles)
+                time.sleep(4) 
+                break
+            except Exception:
+                time.sleep(5)
+                    
+    final_rows = []
+    for art in all_articles:
+        m_kw = art.get("main_keyword", "N/A")
+        m_vol = art.get("main_volume", 0)
+        intent = art.get("intent", "N/A")
+        sub_list = art.get("sub_keywords", [])
+        sub_total = sum([s.get("volume", 0) for s in sub_list])
+        
+        final_rows.append({
+            'Intent': intent, 'Chủ đề chính': m_kw, 'Loại': 'Chính', 
+            'Từ khóa': m_kw, 'Volume': m_vol, 'Tổng Vol Bài': m_vol + sub_total
+        })
+        for s in sub_list:
+            final_rows.append({
+                'Intent': intent, 'Chủ đề chính': m_kw, 'Loại': 'Phụ', 
+                'Từ khóa': s.get("keyword", ""), 'Volume': s.get("volume", 0), 'Tổng Vol Bài': None
+            })
+            
+    return pd.DataFrame(final_rows)
+
+# ================= GIAO DIỆN CHÍNH =================
+st.sidebar.title("Cấu hình công cụ")
+mode = st.sidebar.selectbox("Chọn chức năng:", ["Tool 1: Lọc rác & Gom sơ bộ", "Tool 2: Gemini Mapping"])
+
+st.sidebar.markdown("---")
+user_api = st.sidebar.text_input("Nhập Gemini API Key:", type="password")
+api_to_use = user_api if user_api else "AIzaSyBSPo-XImF7uXzZxpRTclt6-hSRxuS-U5g"
+
+if mode == "Tool 1: Lọc rác & Gom sơ bộ":
+    st.subheader("1️⃣ Lọc từ khóa & Loại bỏ rác ngữ nghĩa")
+    c1, c2 = st.columns(2)
+    with c1: t_seeds = st.text_area("Hạt giống NGÀNH (Mục tiêu):", "kế toán, hóa đơn")
+    with c2: n_seeds = st.text_area("Hạt giống RÁC (Loại bỏ):", "học sinh, giải trí")
+    
+    file1 = st.file_uploader("Tải lên file từ khóa (CSV/Excel):", type=['csv', 'xlsx'])
+    if file1 and st.button("Bắt đầu chạy Tool 1"):
+        try:
+            df_raw = pd.read_csv(file1) if file1.name.endswith('.csv') else pd.read_excel(file1)
+            res_clean, res_trash = tool1_semantic_clustering(df_raw, t_seeds.split(","), n_seeds.split(","))
+            if res_clean is not None:
+                st.session_state.tool1_output_df = res_clean
+                st.success("Xử lý xong! Bạn có thể chuyển sang Tool 2.")
+                out1 = io.BytesIO()
+                res_clean.to_excel(out1, index=False)
+                st.download_button("📥 Tải kết quả Tool 1", out1.getvalue(), "Ket_qua_loc_rac.xlsx")
+        except Exception as e:
+            st.error(f"Lỗi đọc file: {e}")
+
+elif mode == "Tool 2: Gemini Mapping":
+    st.subheader("2️⃣ Gom nhóm chuyên sâu bằng AI")
+    input_source = st.radio("Nguồn dữ liệu:", ["Kế thừa từ Tool 1", "Tải file mới"])
+    
+    df_to_process = None
+    if input_source == "Kế thừa từ Tool 1":
+        if st.session_state.tool1_output_df is not None:
+            st.success("Đã tìm thấy dữ liệu từ Tool 1.")
+            df_to_process = st.session_state.tool1_output_df
+        else:
+            st.warning("Vui lòng chạy Tool 1 trước để có dữ liệu sạch.")
+    else:
+        file2 = st.file_uploader("Tải file từ khóa mới:", type=['csv', 'xlsx'])
+        if file2:
+            df_to_process = pd.read_csv(file2) if file2.name.endswith('.csv') else pd.read_excel(file2)
+
+    if df_to_process is not None and st.button("Chạy Gemini Mapping"):
+        try:
+            final_res = tool2_gemini_clustering(df_to_process, api_to_use)
+            if final_res is not None:
+                st.dataframe(final_res.head(20))
+                out2 = io.BytesIO()
+                final_res.to_excel(out2, index=False)
+                st.download_button("📥 Tải Content Map", out2.getvalue(), "Content_Map_Gemini.xlsx")
+        except Exception as e:
+            st.error(f"Lỗi AI: {e}")
