@@ -34,9 +34,9 @@ if 'tool1_output_df' not in st.session_state:
 
 # ================= HÀM XỬ LÝ CÔNG CỤ 1 (Semantic Filter) =================
 @st.cache_resource
-def load_mpnet_model():
-    # Sử dụng cache để không phải tải lại model mỗi lần nhấn nút
-    return SentenceTransformer('paraphrase-multilingual-mpnet-base-v2')
+def load_semantic_model():
+    # Sử dụng bản MiniLM nhẹ hơn để tránh lỗi RAM trên Streamlit Cloud
+    return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 
 def tool1_semantic_clustering(df, target_seeds, noise_seeds):
     # Chuẩn hóa tên cột
@@ -53,7 +53,7 @@ def tool1_semantic_clustering(df, target_seeds, noise_seeds):
     df = df.dropna(subset=['Keyword'])
     keywords = df['Keyword'].astype(str).tolist()
 
-    model = load_mpnet_model()
+    model = load_semantic_model()
     
     with st.spinner("AI đang phân tích ngữ nghĩa để loại bỏ từ khóa rác..."):
         kw_vecs = model.encode(keywords, batch_size=32, convert_to_tensor=True)
@@ -108,7 +108,6 @@ def tool1_semantic_clustering(df, target_seeds, noise_seeds):
 def tool2_gemini_clustering(df, api_key):
     genai.configure(api_key=api_key)
     
-    # Nhận diện cột từ dữ liệu vào (có thể từ Tool 1 hoặc file upload mới)
     df.columns = df.columns.astype(str).str.strip()
     col_kw = next((c for c in df.columns if 'từ khóa' in c.lower() or 'keyword' in c.lower()), None)
     col_vol = next((c for c in df.columns if 'volume' in c.lower()), None)
@@ -125,7 +124,6 @@ def tool2_gemini_clustering(df, api_key):
     BATCH_SIZE = 70 
     all_articles = []
     
-    # Sử dụng model flash để có tốc độ nhanh và ít bị giới hạn
     model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"temperature": 0.1})
     
     total_kw = len(keywords_data)
