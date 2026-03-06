@@ -36,21 +36,21 @@ if 'df_bridge' not in st.session_state:
 
 # ================= 3. SIDEBAR: CẤU HÌNH & ĐIỀU KHIỂN =================
 st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1055/1055644.png", width=80)
-st.sidebar.title("Hệ Thống SEO AI")
-app_mode = st.sidebar.radio("Chọn chức năng làm việc:", 
-    ["Công cụ 1: Lọc rác & Gom nhóm MPNet", "Công cụ 2: Mapping Intent bằng Gemini"])
+st.sidebar.title("CÔNG CỤ GOM NHÓM TỪ KHÓA - By Dũng MAR")
+app_mode = st.sidebar.radio("Chọn công cụ làm việc:", 
+    ["Công cụ 1: Lọc từ khóa rác và gom nhóm từ khóa cơ bản từ File Ahrefs", "Công cụ 2: Phân nhóm từ khóa thành bài viết cụ thể bằng API Gemini"])
 
 st.sidebar.divider()
 st.sidebar.subheader("🔑 Cấu hình Gemini API")
-user_api_key = st.sidebar.text_input("Nhập API Key cá nhân:", type="password", help="Lấy key tại Google AI Studio")
+user_api_key = st.sidebar.text_input("Nhập API Key của bạn để sử dụng Tool 2 vào đây (nếu không có mặc định sẽ có API miễn phí nhưng dễ bị quá tải gây lỗi):", type="password", help="Lấy key tại Google AI Studio")
 # Key mặc định từ file aaaaa.txt của bạn
 DEFAULT_API_KEY = "AIzaSyBSPo-XImF7uXzZxpRTclt6-hSRxuS-U5g"
 final_api_key = user_api_key if user_api_key else DEFAULT_API_KEY
 
 st.sidebar.info("""
-**💡 Luồng làm việc tối ưu:**
-1. Chạy **Tool 1** để AI lọc sạch rác ngữ nghĩa và gom nhóm sơ bộ.
-2. Sang **Tool 2**, chọn 'Kế thừa' để Gemini lập bản đồ nội dung chuyên sâu (Content Map).
+**💡 Luồng thực hiện gom nhóm từ khóa tối ưu nhất:**
+1. Chạy **Tool 1** để AI lọc sạch rác ngữ nghĩa và gom nhóm sơ bộ. Bạn có thể tải file này về để thực hiện chỉnh sửa bằng tay thêm 1 chút để đảm bảo từ khóa chỉ bao gồm từ khóa mong muốn.
+2. Sang **Tool 2**, chọn 'Kế thừa' để Gemini lập bản đồ nội dung chuyên sâu (Content Map). Hoặc tải file từ khóa bạn muốn gom thành từng bài viết vào đây
 """)
 
 # ================= 4. LOGIC CÔNG CỤ 1 (DỰA TRÊN BBBBBB.TXT) =================
