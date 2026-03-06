@@ -56,12 +56,11 @@ st.sidebar.info("""
 # ================= 4. LOGIC CÔNG CỤ 1 (DỰA TRÊN BBBBBB.TXT) =================
 @st.cache_resource
 def load_mpnet_model():
-    # Sử dụng model MPNet cực kỳ mạnh mẽ cho đa ngôn ngữ (Tiếng Việt rất tốt)
-    # Đây là model thông minh nhất trong bbbbbb.txt
+    # Sử dụng model MPNet từ bbbbbb.txt để đảm bảo độ chính xác cao nhất
     return SentenceTransformer('paraphrase-multilingual-mpnet-base-v2')
 
 def run_tool_1_logic(df, target_seeds, noise_seeds):
-    # Chuẩn hóa tên cột để không bị lỗi dấu hoặc khoảng trắng
+    # Chuẩn hóa tên cột
     df.columns = df.columns.astype(str).str.strip()
     col_kw = next((c for c in df.columns if any(k in c.lower() for k in ['từ khóa', 'keyword', 'từ khoá'])), None)
     col_vol = next((c for c in df.columns if any(k in c.lower() for k in ['volume', 'lượng tìm kiếm'])), None)
@@ -106,7 +105,7 @@ def run_tool_1_logic(df, target_seeds, noise_seeds):
         cluster_model = AgglomerativeClustering(n_clusters=None, distance_threshold=0.35, metric='cosine', linkage='average')
         df_clean['Cluster_ID'] = cluster_model.fit_predict(clean_kw_vecs.cpu().numpy())
 
-        # Tạo Content Map dữ liệu sơ bộ
+        # Tạo Content Map dữ liệu sơ bộ theo cấu trúc bbbbbb.txt
         final_data = []
         cluster_volumes = df_clean.groupby('Cluster_ID')['Volume'].sum().reset_index().sort_values(by='Volume', ascending=False)
 
@@ -157,7 +156,6 @@ def run_tool_2_logic(df, api_key):
         input_str = "\n".join([f"- {item['Từ Khóa']} (Volume: {item['Volume']})" for item in batch])
         
         # PROMPT GỐC TỪ AAAAA.TXT (LUẬT SINH TỬ)
-        # Sử dụng cấu trúc nối chuỗi (f-string) cẩn thận để tránh lỗi unterminated string
         prompt = (
             "Bạn là Trưởng phòng SEO kỹ thuật cực kỳ khắt khe. Nhiệm vụ của bạn là gom nhóm danh sách từ khóa sau thành các Bài viết (URLs).\n\n"
             "LUẬT GOM NHÓM SINH TỬ (Đọc kỹ):\n"
@@ -185,4 +183,149 @@ def run_tool_2_logic(df, api_key):
                 response = model.generate_content(prompt)
                 res_text = response.text.strip()
                 # Làm sạch Markdown nếu AI tự ý thêm vào
-                if res_text.startswith("
+                if res_text.startswith("```json"):
+                    res_text = res_text[7:]
+                elif res_text.startswith("```"):
+                    res_text = res_text[3:]
+                
+                if res_text.endswith("```"):
+                    res_text = res_text[:-3]
+                
+                batch_json = json.loads(res_text.strip())
+                all_articles.extend(batch_json)
+                time.sleep(5) # Nghỉ 5s chống rate limit
+                break
+            except Exception as e:
+                if "429" in str(e) or "Quota exceeded" in str(e):
+                    status_text.warning(f"⚠️ Batch {batch_num} bị Rate Limit. Đang nghỉ giải lao 40 giây...")
+                    time.sleep(40)
+                else:
+                    status_text.error(f"❌ Batch {batch_num} gặp lỗi: {str(e)}")
+                    time.sleep(5)
+
+    # Xử lý báo cáo như aaaaa.txt
+    content_map_data = []
+    for article in all_articles:
+        intent = article.get("intent", "Chung")
+        main_kw = article.get("main_keyword", "")
+        main_vol = article.get("main_volume", 0)
+        sub_kws = article.get("sub_keywords", [])
+        total_v = main_vol + sum([s.get("volume", 0) for s in sub_kws])
+
+        content_map_data.append({
+            'Search Intent': intent, 'Từ Khóa Chính (H1)': main_kw, 'Phân Loại': '1 - Keyword Chính',
+            'Từ Khóa': main_kw, 'Volume': main_vol, 'Tổng Volume Bài': total_v
+        })
+        for sub in sub_kws:
+            content_map_data.append({
+                'Search Intent': intent, 'Từ Khóa Chính (H1)': main_kw, 'Phân Loại': '2 - Keyword Phụ',
+                'Từ Khóa': sub.get("keyword", ""), 'Volume': sub.get("volume", 0), 'Tổng Volume Bài': None
+            })
+            
+    df_out = pd.DataFrame(content_map_data)
+    df_out['Temp_Total'] = df_out.groupby('Từ Khóa Chính (H1)')['Volume'].transform('sum')
+    df_out = df_out.sort_values(by=['Temp_Total', 'Từ Khóa Chính (H1)', 'Phân Loại'], ascending=[False, True, True])
+    return df_out.drop(columns=['Temp_Total'])
+
+# ================= 6. GIAO DIỆN CHÍNH (MAIN UI) =================
+st.title("Hệ Thống SEO AI Pro 🚀")
+
+if app_mode == "Công cụ 1: Lọc rác & Gom nhóm MPNet":
+    st.header("🔍 Công cụ 1: Lọc Rác Ngữ Nghĩa (MPNet Base V2)")
+    
+    with st.expander("📖 Giải thích Logic & Hướng dẫn sử dụng", expanded=True):
+        st.markdown(f"""
+        <div class="logic-container">
+            <div class="guide-title"><span class="step-badge">1</span> Cách thức hoạt động</div>
+            Sử dụng lõi AI <b>MPNet Base V2</b> để chuyển từ khóa thành Vector ý nghĩa. Hệ thống so sánh từ khóa của bạn với nhóm mục tiêu (Ngành) và nhóm rác.<br>
+            - Nếu từ khóa giống nhóm "Rác" hơn nhóm "Ngành", nó sẽ bị loại bỏ.<br>
+            - Những từ còn lại được gom nhóm bằng thuật toán máy học <i>Agglomerative Clustering</i>.<br><br>
+            <div class="guide-title"><span class="step-badge">2</span> Cách nhập liệu tối ưu</div>
+            - <b>Hạt giống NGÀNH:</b> Nhập các từ khóa "trụ cột" của sản phẩm (Ví dụ: <i>kế toán, hóa đơn, phần mềm</i>).<br>
+            - <b>Hạt giống RÁC:</b> Nhập các chủ đề dễ gây nhầm lẫn (Ví dụ: <i>phim ảnh, giải trí, nông nghiệp</i>).
+        </div>
+        """, unsafe_allow_html=True)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        target_in = st.text_area("Hạt giống NGÀNH (Target Seeds):", "kế toán, hóa đơn")
+    with c2:
+        noise_in = st.text_area("Hạt giống RÁC (Noise Seeds):", "học sinh, sinh viên, giải trí, mạng xã hội, facebook, game, phim ảnh, lừa đảo, tải nhạc, mua sắm")
+
+    file1 = st.file_uploader("Tải file từ khóa gốc (Ahrefs CSV/Excel):", type=['csv', 'xlsx'])
+    
+    if file1 and st.button("🚀 Chạy Lọc & Gom Nhóm"):
+        try:
+            if file1.name.endswith('.csv'):
+                # Xử lý Encoding đa dạng (Sửa lỗi 'utf-8 codec can't decode')
+                encodings = ['utf-8-sig', 'utf-16', 'latin1', 'cp1252']
+                df_in = None
+                for enc in encodings:
+                    try: 
+                        file1.seek(0)
+                        df_in = pd.read_csv(file1, encoding=enc)
+                        break
+                    except: continue
+                if df_in is None: st.error("❌ Không thể đọc file CSV. Vui lòng kiểm tra lại định dạng.")
+            else:
+                df_in = pd.read_excel(file1)
+            
+            if df_in is not None:
+                res_clean, res_trash = run_tool_1_logic(df_in, target_in.split(","), noise_in.split(","))
+                
+                if res_clean is not None:
+                    st.session_state.df_bridge = res_clean # Lưu bridge cho Tool 2
+                    st.success(f"✅ Hoàn thành! Đã giữ lại {len(res_clean)} từ khóa chất lượng.")
+                    st.dataframe(res_clean.head(20))
+                    
+                    output_buf = io.BytesIO()
+                    with pd.ExcelWriter(output_buf, engine='openpyxl') as writer:
+                        res_clean.to_excel(writer, sheet_name='Content Map', index=False)
+                        res_trash.to_excel(writer, sheet_name='Từ Khóa Bị Loại', index=False)
+                    st.download_button("📥 Tải kết quả Công cụ 1", output_buf.getvalue(), "SEO_Tool1_Semantic.xlsx")
+        except Exception as e: st.error(f"Lỗi: {str(e)}")
+
+else:
+    st.header("🧠 Công cụ 2: Mapping Intent bằng Gemini AI")
+    
+    with st.expander("📖 Giải thích Logic & Hướng dẫn sử dụng", expanded=True):
+        st.markdown(f"""
+        <div class="logic-container">
+            <div class="guide-title"><span class="step-badge">1</span> Cách thức hoạt động</div>
+            Sử dụng trí tuệ nhân tạo <b>Gemini 1.5 Flash</b> để hiểu <b>Search Intent</b> (ý định tìm kiếm).<br>
+            - Áp dụng 4 "Luật sinh tử" để quyết định gom từ khóa vào chung một URL hay tách riêng.<br>
+            - Phân loại chính xác Keyword chính (H1) và các Keyword phụ hỗ trợ.<br><br>
+            <div class="guide-title"><span class="step-badge">2</span> Nguồn dữ liệu</div>
+            Nên chọn <b>"Kế thừa từ Công cụ 1"</b> để xử lý dữ liệu đã được lọc sạch rác.
+        </div>
+        """, unsafe_allow_html=True)
+
+    source = st.radio("Chọn nguồn dữ liệu đầu vào:", ["Kế thừa từ Công cụ 1", "Tải lên file mới"])
+    
+    df_to_ai = None
+    if source == "Kế thừa từ Công cụ 1":
+        if st.session_state.df_bridge is not None:
+            st.info(f"📍 Đã nạp {len(st.session_state.df_bridge)} từ khóa đã lọc sạch từ Công cụ 1.")
+            df_to_ai = st.session_state.df_bridge
+        else:
+            st.warning("⚠️ Chưa có dữ liệu từ Công cụ 1. Vui lòng quay lại bước 1 hoặc tải file mới.")
+    else:
+        file2 = st.file_uploader("Tải file từ khóa đã lọc sạch (Cần có cột 'Từ khóa' và 'Volume'):", type=['csv', 'xlsx'])
+        if file2:
+            if file2.name.endswith('.csv'):
+                for enc in ['utf-8-sig', 'utf-16']:
+                    try: file2.seek(0); df_to_ai = pd.read_csv(file2, encoding=enc); break
+                    except: continue
+            else: df_to_ai = pd.read_excel(file2)
+
+    if df_to_ai is not None and st.button("🔥 Chạy AI Mapping Chuyên Sâu"):
+        try:
+            map_res = run_tool_2_logic(df_to_ai, final_api_key)
+            if map_res is not None:
+                st.success("🎉 Đã hoàn thành lập Content Map bằng AI!")
+                st.dataframe(map_res.head(30))
+                
+                output_buf2 = io.BytesIO()
+                map_res.to_excel(output_buf2, index=False)
+                st.download_button("📥 Tải Content Map Cuối Cùng", output_buf2.getvalue(), "Final_SEO_Content_Map.xlsx")
+        except Exception as e: st.error(f"Lỗi AI: {str(e)}")
