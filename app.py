@@ -14,7 +14,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # ================= 1. CẤU HÌNH GIAO DIỆN & STYLE =================
-st.set_page_config(page_title="Hệ thống SEO AI Pro", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="CÔNG CỤ GOM NHÓM TỪ KHÓA - By Dũng MAR", layout="wide", page_icon="🚀")
 
 # CSS tùy chỉnh để làm giao diện chuyên nghiệp
 st.markdown("""
@@ -237,20 +237,20 @@ if app_mode == "Công cụ 1: Lọc rác & Gom nhóm MPNet":
         st.markdown(f"""
         <div class="logic-container">
             <div class="guide-title"><span class="step-badge">1</span> Cách thức hoạt động</div>
-            Sử dụng lõi AI <b>MPNet Base V2</b> để chuyển từ khóa thành Vector ý nghĩa. Hệ thống so sánh từ khóa của bạn với nhóm mục tiêu (Ngành) và nhóm rác.<br>
-            - Nếu từ khóa giống nhóm "Rác" hơn nhóm "Ngành", nó sẽ bị loại bỏ.<br>
-            - Những từ còn lại được gom nhóm bằng thuật toán máy học <i>Agglomerative Clustering</i>.<br><br>
+            Sử dụng lõi AI <b>MPNet Base V2</b> để chuyển từ khóa thành Vector ý nghĩa. Hệ thống so sánh từ khóa của bạn với nhóm từ khóa mục tiêu (Ngành) và nhóm rác.<br>
+            - Nếu từ khóa giống nhóm từ khóa "Rác" hơn nhóm "Ngành", nó sẽ bị loại bỏ.<br>
+            - Những từ khóa còn lại được gom nhóm bằng thuật toán máy học <i>Agglomerative Clustering</i>.<br><br>
             <div class="guide-title"><span class="step-badge">2</span> Cách nhập liệu tối ưu</div>
-            - <b>Hạt giống NGÀNH:</b> Nhập các từ khóa "trụ cột" của sản phẩm (Ví dụ: <i>kế toán, hóa đơn, phần mềm</i>).<br>
-            - <b>Hạt giống RÁC:</b> Nhập các chủ đề dễ gây nhầm lẫn (Ví dụ: <i>phim ảnh, giải trí, nông nghiệp</i>).
+            - <b>Nhóm từ khóa đích:</b> Nhập các từ khóa "trụ cột" của sản phẩm (Ví dụ: <i>kế toán, hóa đơn, phần mềm</i>).<br>
+            - <b>Nhóm từ khóa Rác:</b> Nhập các chủ đề dễ gây nhầm lẫn (Ví dụ: <i>phim ảnh, giải trí, nông nghiệp</i>).
         </div>
         """, unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
     with c1:
-        target_in = st.text_area("Hạt giống NGÀNH (Target Seeds):", "kế toán, hóa đơn")
+        target_in = st.text_area("Nhóm từ khóa đích (Target Seeds):", "kế toán, hóa đơn")
     with c2:
-        noise_in = st.text_area("Hạt giống RÁC (Noise Seeds):", "học sinh, sinh viên, giải trí, mạng xã hội, facebook, game, phim ảnh, lừa đảo, tải nhạc, mua sắm")
+        noise_in = st.text_area("Nhóm từ khóa đích (Noise Seeds):", "học sinh, sinh viên, giải trí, mạng xã hội, facebook, game, phim ảnh, lừa đảo, tải nhạc, mua sắm")
 
     file1 = st.file_uploader("Tải file từ khóa gốc (Ahrefs CSV/Excel):", type=['csv', 'xlsx'])
     
@@ -293,7 +293,7 @@ else:
         <div class="logic-container">
             <div class="guide-title"><span class="step-badge">1</span> Cách thức hoạt động</div>
             Sử dụng trí tuệ nhân tạo <b>Gemini 1.5 Flash</b> để hiểu <b>Search Intent</b> (ý định tìm kiếm).<br>
-            - Áp dụng 4 "Luật sinh tử" để quyết định gom từ khóa vào chung một URL hay tách riêng.<br>
+            - Hiểu sâu từ khóa để quyết định gom từ khóa vào chung một URL hay tách riêng.<br>
             - Phân loại chính xác Keyword chính (H1) và các Keyword phụ hỗ trợ.<br><br>
             <div class="guide-title"><span class="step-badge">2</span> Nguồn dữ liệu</div>
             Nên chọn <b>"Kế thừa từ Công cụ 1"</b> để xử lý dữ liệu đã được lọc sạch rác.
