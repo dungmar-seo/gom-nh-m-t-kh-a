@@ -228,7 +228,7 @@ def run_tool_2_logic(df, api_key):
     return df_out.drop(columns=['Temp_Total'])
 
 # ================= 6. GIAO DIỆN CHÍNH (MAIN UI) =================
-st.title("Hệ Thống SEO AI Pro 🚀")
+st.title("Gom nhóm từ khóa miễn phí với AI 🚀")
 
 if app_mode == "Công cụ 1: Lọc rác & Gom nhóm MPNet":
     st.header("🔍 Công cụ 1: Lọc Rác Ngữ Nghĩa (MPNet Base V2)")
