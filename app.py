@@ -230,8 +230,8 @@ def run_tool_2_logic(df, api_key):
 # ================= 6. GIAO DIỆN CHÍNH (MAIN UI) =================
 st.title("Gom nhóm từ khóa miễn phí với AI 🚀")
 
-if app_mode == "Công cụ 1: Lọc rác & Gom nhóm MPNet":
-    st.header("🔍 Công cụ 1: Lọc Rác Ngữ Nghĩa (MPNet Base V2)")
+if app_mode == "Công cụ 1: Lọc từ khóa rác và gom nhóm từ khóa cơ bản từ File Ahrefs":
+    st.header("🔍 Công cụ 1: Lọc từ khóa rác và gom nhóm từ khóa cơ bản từ File Ahrefs")
     
     with st.expander("📖 Giải thích Logic & Hướng dẫn sử dụng", expanded=True):
         st.markdown(f"""
@@ -286,7 +286,7 @@ if app_mode == "Công cụ 1: Lọc rác & Gom nhóm MPNet":
         except Exception as e: st.error(f"Lỗi: {str(e)}")
 
 else:
-    st.header("🧠 Công cụ 2: Mapping Intent bằng Gemini AI")
+    st.header("🧠 Công cụ 2: Phân nhóm từ khóa thành bài viết cụ thể bằng API Gemini")
     
     with st.expander("📖 Giải thích Logic & Hướng dẫn sử dụng", expanded=True):
         st.markdown(f"""
