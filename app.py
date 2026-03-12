@@ -88,8 +88,7 @@ with st.sidebar:
             "- AI sẽ lọc rác và gom nhóm ngữ nghĩa\n\n"
             "**Công cụ 2** - Gom bài viết bằng Gemini:\n"
             "- Upload file Excel hoặc dùng output từ Công cụ 1\n"
-            "- Cần có cột Từ khóa và Volume\n"
-            "- Gemini AI sẽ gom thành bài viết chi tiết\n\n"
+            "- Cần có cột Từ khóa và Volume\n\n"
             "**Pipeline** - Chạy liên tục:\n"
             "- Upload CSV, chạy Công cụ 1 xong tự động sang Công cụ 2"
         )
@@ -134,7 +133,9 @@ def to_excel_bytes(df_main, df_trash=None):
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df_main.to_excel(writer, sheet_name="Content Map", index=False)
         if df_trash is not None and len(df_trash) > 0:
-            df_trash.to_excel(writer, sheet_name="Từ Khóa Bị Loại", index=False)
+            df_trash.to_excel(
+                writer, sheet_name="Từ Khóa Bị Loại", index=False
+            )
     return output.getvalue()
 
 
@@ -148,24 +149,34 @@ def to_excel_bytes_single(df):
 # ============================================================
 # CONG CU 1: LOC & GOM TU KHOA
 # ============================================================
-def run_tool1(uploaded_file, target_seeds, noise_seeds, distance_threshold, margin):
+def run_tool1(uploaded_file, target_seeds, noise_seeds,
+              distance_threshold, margin):
     from sentence_transformers import SentenceTransformer, util
     from sklearn.cluster import AgglomerativeClustering
 
     progress_bar = st.progress(0)
     status_text = st.empty()
 
-    status_text.markdown("📂 **Bước 1/5:** Đang đọc dữ liệu đầu vào...")
+    status_text.markdown(
+        "📂 **Bước 1/5:** Đang đọc dữ liệu đầu vào..."
+    )
     progress_bar.progress(5)
 
     try:
         try:
-            df = pd.read_csv(uploaded_file, encoding="utf-8-sig", on_bad_lines="skip")
+            df = pd.read_csv(
+                uploaded_file,
+                encoding="utf-8-sig",
+                on_bad_lines="skip"
+            )
         except Exception:
             uploaded_file.seek(0)
             df = pd.read_csv(
-                uploaded_file, encoding="utf-16", sep="\t",
-                engine="python", on_bad_lines="skip"
+                uploaded_file,
+                encoding="utf-16",
+                sep="\t",
+                engine="python",
+                on_bad_lines="skip"
             )
     except Exception as e:
         st.error("❌ Không thể đọc file: " + str(e))
@@ -200,27 +211,44 @@ def run_tool1(uploaded_file, target_seeds, noise_seeds, distance_threshold, marg
     df = df[df["Keyword"] != ""]
     keywords = df["Keyword"].tolist()
 
-    st.info("📊 Tổng từ khóa đầu vào: **" + str(len(keywords)) + "**")
+    st.info(
+        "📊 Tổng từ khóa đầu vào: **" + str(len(keywords)) + "**"
+    )
     progress_bar.progress(15)
 
     if len(keywords) == 0:
         st.error("❌ File không có từ khóa hợp lệ!")
         return None, None
 
-    status_text.markdown("🧠 **Bước 2/5:** Đang tải AI (MPNet)...")
+    status_text.markdown(
+        "🧠 **Bước 2/5:** Đang tải AI (MPNet)..."
+    )
     progress_bar.progress(20)
-    smodel = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
+    smodel = SentenceTransformer(
+        "paraphrase-multilingual-mpnet-base-v2"
+    )
     progress_bar.progress(40)
 
-    status_text.markdown("🔬 **Bước 3/5:** AI đang phân định ranh giới ngữ nghĩa...")
+    status_text.markdown(
+        "🔬 **Bước 3/5:** AI đang phân định ranh giới ngữ nghĩa..."
+    )
     kw_vecs = smodel.encode(
-        keywords, batch_size=64, convert_to_tensor=True, show_progress_bar=False
+        keywords,
+        batch_size=64,
+        convert_to_tensor=True,
+        show_progress_bar=False
     )
     target_vecs = smodel.encode(target_seeds, convert_to_tensor=True)
     noise_vecs = smodel.encode(noise_seeds, convert_to_tensor=True)
 
-    target_scores = util.cos_sim(kw_vecs, target_vecs).max(dim=1).values.tolist()
-    noise_scores = util.cos_sim(kw_vecs, noise_vecs).max(dim=1).values.tolist()
+    target_scores = (
+        util.cos_sim(kw_vecs, target_vecs)
+        .max(dim=1).values.tolist()
+    )
+    noise_scores = (
+        util.cos_sim(kw_vecs, noise_vecs)
+        .max(dim=1).values.tolist()
+    )
 
     clean_indices = []
     trash_indices = []
@@ -237,33 +265,46 @@ def run_tool1(uploaded_file, target_seeds, noise_seeds, distance_threshold, marg
 
     c1, c2 = st.columns(2)
     with c1:
-        st.success("✅ Giữ lại: **" + str(len(df_clean)) + "** từ khóa")
+        st.success(
+            "✅ Giữ lại: **" + str(len(df_clean)) + "** từ khóa"
+        )
     with c2:
-        st.warning("🗑️ Loại bỏ: **" + str(len(df_trash)) + "** từ khóa")
+        st.warning(
+            "🗑️ Loại bỏ: **" + str(len(df_trash)) + "** từ khóa"
+        )
 
     if len(df_clean) == 0:
         st.error("❌ Không còn từ khóa nào sau khi lọc!")
         return None, None
 
-    status_text.markdown("🧩 **Bước 4/5:** Gom nhóm ngữ nghĩa...")
+    status_text.markdown(
+        "🧩 **Bước 4/5:** Gom nhóm ngữ nghĩa..."
+    )
     cluster_model = AgglomerativeClustering(
         n_clusters=None,
         distance_threshold=distance_threshold,
         metric="cosine",
         linkage="average"
     )
-    df_clean["Cluster_ID"] = cluster_model.fit_predict(clean_kw_vecs.cpu().numpy())
+    df_clean["Cluster_ID"] = cluster_model.fit_predict(
+        clean_kw_vecs.cpu().numpy()
+    )
     progress_bar.progress(80)
 
     status_text.markdown("📊 **Bước 5/5:** Đang tạo báo cáo...")
     content_map_data = []
-    cluster_volumes = df_clean.groupby("Cluster_ID")["Volume"].sum().reset_index()
-    cluster_volumes = cluster_volumes.sort_values(by="Volume", ascending=False)
+    cluster_volumes = (
+        df_clean.groupby("Cluster_ID")["Volume"]
+        .sum().reset_index()
+    )
+    cluster_volumes = cluster_volumes.sort_values(
+        by="Volume", ascending=False
+    )
 
     for cid in cluster_volumes["Cluster_ID"]:
-        group = df_clean[df_clean["Cluster_ID"] == cid].sort_values(
-            by="Volume", ascending=False
-        )
+        group = df_clean[
+            df_clean["Cluster_ID"] == cid
+        ].sort_values(by="Volume", ascending=False)
         focus_keyword = group.iloc[0]["Keyword"]
         total_volume = group["Volume"].sum()
 
@@ -272,10 +313,15 @@ def run_tool1(uploaded_file, target_seeds, noise_seeds, distance_threshold, marg
             is_main = (idx == 0)
             content_map_data.append({
                 "Chủ Đề (Tên Bài)": focus_keyword,
-                "Phân Loại": "1 - Keyword Chính" if is_main else "2 - Keyword Phụ",
+                "Phân Loại": (
+                    "1 - Keyword Chính" if is_main
+                    else "2 - Keyword Phụ"
+                ),
                 "Từ Khóa": row["Keyword"],
                 "Volume": row["Volume"],
-                "Tổng Traffic Nhóm": total_volume if is_main else None
+                "Tổng Traffic Nhóm": (
+                    total_volume if is_main else None
+                )
             })
 
     df_final = pd.DataFrame(content_map_data)
@@ -286,6 +332,151 @@ def run_tool1(uploaded_file, target_seeds, noise_seeds, distance_threshold, marg
         by="Volume", ascending=False
     )
     return df_final, df_trash_out
+
+
+# ============================================================
+# GIAO DIEN CONG CU 1
+# ============================================================
+if "Công cụ 1" in tool_choice:
+    st.markdown("## 🧹 Công cụ 1: Lọc & Gom từ khóa Semantic")
+    st.markdown(
+        "Upload file CSV từ Ahrefs, AI sẽ lọc rác "
+        "và gom nhóm từ khóa."
+    )
+
+    col_upload, col_config = st.columns([1, 1])
+
+    with col_upload:
+        st.markdown("### 📁 Upload File")
+        uploaded_file = st.file_uploader(
+            "Chọn file CSV từ Ahrefs",
+            type=["csv"],
+            key="tool1_upload"
+        )
+
+    with col_config:
+        st.markdown("### 🎯 Cấu hình hạt giống")
+        target_input = st.text_area(
+            "🎯 Hạt giống MỤC TIÊU (mỗi dòng 1 từ)",
+            value="kế toán\nhóa đơn",
+            height=100,
+        )
+        noise_default = (
+            "học sinh\nsinh viên\ngiải trí\n"
+            "mạng xã hội\nfacebook\ngmail\n"
+            "game\nphim ảnh\nhoa\nhack\n"
+            "lừa đảo\ntải nhạc\nmua sắm\n"
+            "đời sống\nnông nghiệp"
+        )
+        noise_input = st.text_area(
+            "🚫 Hạt giống NHIỄU (mỗi dòng 1 từ)",
+            value=noise_default,
+            height=150,
+        )
+
+    with st.expander("⚙️ Tham số nâng cao", expanded=False):
+        adv1, adv2 = st.columns(2)
+        with adv1:
+            distance_threshold = st.slider(
+                "Ngưỡng khoảng cách gom nhóm",
+                min_value=0.1,
+                max_value=0.8,
+                value=0.35,
+                step=0.05
+            )
+        with adv2:
+            margin = st.slider(
+                "Biên độ an toàn (Margin)",
+                min_value=0.0,
+                max_value=0.2,
+                value=0.05,
+                step=0.01
+            )
+
+    st.markdown("---")
+
+    if uploaded_file is not None:
+        if st.button(
+            "🚀 Bắt đầu lọc & gom từ khóa",
+            type="primary",
+            use_container_width=True
+        ):
+            target_seeds = [
+                s.strip()
+                for s in target_input.strip().split("\n")
+                if s.strip()
+            ]
+            noise_seeds = [
+                s.strip()
+                for s in noise_input.strip().split("\n")
+                if s.strip()
+            ]
+            if not target_seeds:
+                st.error("❌ Nhập ít nhất 1 hạt giống mục tiêu!")
+            else:
+                with st.spinner("Đang xử lý..."):
+                    df_result, df_trash = run_tool1(
+                        uploaded_file,
+                        target_seeds,
+                        noise_seeds,
+                        distance_threshold,
+                        margin
+                    )
+                if df_result is not None:
+                    st.session_state.tool1_result = df_result
+                    st.session_state.tool1_trash = df_trash
+
+    # Hien thi ket qua Cong cu 1
+    if st.session_state.tool1_result is not None:
+        st.markdown("### 📊 Kết quả")
+        df_res = st.session_state.tool1_result
+        df_tr = st.session_state.tool1_trash
+
+        num_clusters = df_res["Chủ Đề (Tên Bài)"].nunique()
+        trash_count = len(df_tr) if df_tr is not None else 0
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("📝 Số nhóm bài", str(num_clusters))
+        m2.metric("✅ Từ khóa giữ", str(len(df_res)))
+        m3.metric("🗑️ Từ khóa loại", str(trash_count))
+
+        tab1, tab2 = st.tabs(
+            ["📗 Content Map", "🗑️ Từ khóa bị loại"]
+        )
+        with tab1:
+            st.dataframe(
+                df_res, use_container_width=True, height=400
+            )
+        with tab2:
+            if df_tr is not None and len(df_tr) > 0:
+                st.dataframe(
+                    df_tr, use_container_width=True, height=400
+                )
+            else:
+                st.info("Không có từ khóa nào bị loại.")
+
+        excel_bytes = to_excel_bytes(df_res, df_tr)
+        st.download_button(
+            label="📥 Tải xuống file Excel",
+            data=excel_bytes,
+            file_name="Content_Map_Semantic.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-"
+                "officedocument.spreadsheetml.sheet"
+            ),
+            use_container_width=True
+        )
+
+        st.markdown("---")
+        st.info(
+            "💡 **Mẹo:** Chuyển sang **Công cụ 2** hoặc "
+            "**Pipeline** ở sidebar để dùng kết quả này "
+            "làm đầu vào cho Gemini AI."
+        )
+
+# === KET THUC PHAN 1/2 ===
+# Phan tiep theo gom: Cong cu 2, Pipeline, render_api_config,
+# render_tool2_result
 # ============================================================
 # CONG CU 2: GOM BAI VIET BANG GEMINI
 # ============================================================
@@ -295,7 +486,9 @@ def run_tool2(df_input, api_key, batch_size):
     progress_bar = st.progress(0)
     status_text = st.empty()
 
-    status_text.markdown("🔑 **Bước 1/3:** Đang kết nối Gemini AI...")
+    status_text.markdown(
+        "🔑 **Bước 1/3:** Đang kết nối Gemini AI..."
+    )
     genai.configure(api_key=api_key)
 
     try:
@@ -320,7 +513,8 @@ def run_tool2(df_input, api_key, batch_size):
 
         st.info("🤖 Model: **" + model_name + "**")
         ai_model = genai.GenerativeModel(
-            model_name, generation_config={"temperature": 0.1}
+            model_name,
+            generation_config={"temperature": 0.1}
         )
     except Exception as e:
         st.error("❌ Lỗi kết nối API: " + str(e))
@@ -328,7 +522,9 @@ def run_tool2(df_input, api_key, batch_size):
 
     progress_bar.progress(10)
 
-    status_text.markdown("📂 **Bước 2/3:** Đang chuẩn bị dữ liệu...")
+    status_text.markdown(
+        "📂 **Bước 2/3:** Đang chuẩn bị dữ liệu..."
+    )
     df_input.columns = df_input.columns.astype(str).str.strip()
 
     col_kw = find_keyword_column(df_input)
@@ -341,7 +537,9 @@ def run_tool2(df_input, api_key, batch_size):
         )
         return None
 
-    df_work = df_input.rename(columns={col_kw: "Từ Khóa", col_vol: "Volume"})
+    df_work = df_input.rename(
+        columns={col_kw: "Từ Khóa", col_vol: "Volume"}
+    )
     df_work["Volume"] = safe_to_numeric_series(df_work, "Volume")
     keywords_data = df_work[["Từ Khóa", "Volume"]].to_dict("records")
     total_kw = len(keywords_data)
@@ -349,9 +547,14 @@ def run_tool2(df_input, api_key, batch_size):
     st.info("📊 Tổng từ khóa: **" + str(total_kw) + "**")
     progress_bar.progress(15)
 
-    status_text.markdown("🤖 **Bước 3/3:** Đang gửi cho Gemini phân tích...")
+    status_text.markdown(
+        "🤖 **Bước 3/3:** Đang gửi cho Gemini phân tích..."
+    )
     all_articles = []
-    total_batches = (total_kw // batch_size) + (1 if total_kw % batch_size else 0)
+    total_batches = (
+        (total_kw // batch_size)
+        + (1 if total_kw % batch_size else 0)
+    )
     batch_progress = st.empty()
 
     for i in range(0, total_kw, batch_size):
@@ -359,33 +562,39 @@ def run_tool2(df_input, api_key, batch_size):
         batch_num = i // batch_size + 1
 
         batch_progress.markdown(
-            "⏳ Batch **" + str(batch_num) + "/" + str(total_batches) + "**..."
+            "⏳ Batch **" + str(batch_num)
+            + "/" + str(total_batches) + "**..."
         )
-        current_progress = 15 + int((batch_num / total_batches) * 80)
+        current_progress = 15 + int(
+            (batch_num / total_batches) * 80
+        )
         progress_bar.progress(min(current_progress, 95))
 
         lines = []
         for item in batch:
             lines.append(
                 "- " + str(item["Từ Khóa"])
-                + " (Volume: " + str(int(item["Volume"])) + ")"
+                + " (Volume: "
+                + str(int(item["Volume"])) + ")"
             )
         input_data_str = "\n".join(lines)
 
         prompt = (
             "Bạn là Trưởng phòng SEO kỹ thuật cực kỳ khắt khe. "
-            "Nhiệm vụ: gom nhóm từ khóa thành các Bài viết (URLs).\n\n"
+            "Nhiệm vụ: gom nhóm từ khóa thành Bài viết.\n\n"
             "LUẬT GOM NHÓM:\n"
-            "1. CÙNG URL: 2 từ khóa chỉ chung nhóm nếu người dùng muốn "
-            "đọc ĐÚNG CÙNG 1 BÀI VIẾT.\n"
-            "2. CHỐNG GOM CƯỠNG ÉP: Ý nghĩa khác nhau = tách riêng.\n"
-            "3. QUYỀN CÔ LẬP: Từ khóa không liên quan = đứng 1 mình.\n"
-            "4. GIỮ NGUYÊN: Giữ nguyên 100% từ khóa và volume.\n\n"
-            "DANH SÁCH TỪ KHÓA:\n" + input_data_str + "\n\n"
+            "1. CÙNG URL: 2 từ khóa chỉ chung nhóm nếu "
+            "người dùng muốn đọc ĐÚNG CÙNG 1 BÀI VIẾT.\n"
+            "2. CHỐNG GOM CƯỠNG ÉP: Ý nghĩa khác = tách.\n"
+            "3. QUYỀN CÔ LẬP: Không liên quan = đứng 1 mình.\n"
+            "4. GIỮ NGUYÊN: 100% từ khóa và volume.\n\n"
+            "DANH SÁCH TỪ KHÓA:\n"
+            + input_data_str + "\n\n"
             "OUTPUT: Chỉ xuất 1 mảng JSON, không code block.\n"
             '[\n'
             '  {\n'
-            '    "intent": "Định nghĩa / Hướng dẫn / Thương mại / Phần mềm",\n'
+            '    "intent": "Định nghĩa / Hướng dẫn / '
+            'Thương mại / Phần mềm",\n'
             '    "main_keyword": "từ khóa chính",\n'
             '    "main_volume": 1000,\n'
             '    "sub_keywords": [\n'
@@ -415,13 +624,15 @@ def run_tool2(df_input, api_key, batch_size):
                 error_msg = str(e)
                 if "429" in error_msg or "Quota" in error_msg:
                     batch_progress.warning(
-                        "⚠️ Rate limit Batch " + str(batch_num)
-                        + " (Lần " + str(attempt + 1) + "). Chờ 40s..."
+                        "⚠️ Rate limit Batch "
+                        + str(batch_num) + " (Lần "
+                        + str(attempt + 1) + "). Chờ 40s..."
                     )
                     time.sleep(40)
                 else:
                     batch_progress.error(
-                        "❌ Lỗi Batch " + str(batch_num) + ": " + str(e)
+                        "❌ Lỗi Batch " + str(batch_num)
+                        + ": " + str(e)
                     )
                     break
 
@@ -437,7 +648,9 @@ def run_tool2(df_input, api_key, batch_size):
         main_kw = article.get("main_keyword", "")
         main_vol = article.get("main_volume", 0)
         sub_kws = article.get("sub_keywords", [])
-        sub_vol_sum = sum([s.get("volume", 0) for s in sub_kws])
+        sub_vol_sum = sum(
+            [s.get("volume", 0) for s in sub_kws]
+        )
         total_volume = main_vol + sub_vol_sum
 
         content_map_data.append({
@@ -480,7 +693,10 @@ def render_api_config():
     st.markdown("### 🔑 Cấu hình API Gemini")
     api_option = st.radio(
         "Chọn API Key",
-        options=["Sử dụng API mặc định", "Nhập API Key của tôi"],
+        options=[
+            "Sử dụng API mặc định",
+            "Nhập API Key của tôi"
+        ],
         index=0,
         horizontal=True,
     )
@@ -499,7 +715,10 @@ def render_api_config():
 
     batch_size = st.slider(
         "Số từ khóa mỗi batch",
-        min_value=20, max_value=150, value=80, step=10,
+        min_value=20,
+        max_value=150,
+        value=80,
+        step=10,
         help="Khuyến nghị: 60-100"
     )
     return api_key, batch_size
@@ -519,97 +738,252 @@ def render_tool2_result(df_result):
     m2.metric("🔑 Tổng từ khóa", str(total_kw))
     m3.metric("📈 Tổng Volume", str(int(total_vol)))
 
-    st.dataframe(df_result, use_container_width=True, height=500)
+    st.dataframe(
+        df_result, use_container_width=True, height=500
+    )
 
     excel_bytes = to_excel_bytes_single(df_result)
     st.download_button(
         label="📥 Tải xuống Content Map AI (Excel)",
         data=excel_bytes,
         file_name="Content_Map_Gemini.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        mime=(
+            "application/vnd.openxmlformats-"
+            "officedocument.spreadsheetml.sheet"
+        ),
         use_container_width=True
     )
 
 
 # ============================================================
-# GIAO DIEN CHINH
+# GIAO DIEN CONG CU 2
 # ============================================================
+if "Công cụ 2" in tool_choice:
+    st.markdown("## 🤖 Công cụ 2: Gom bài viết bằng Gemini AI")
+    st.markdown(
+        "Upload file Excel chứa từ khóa đã lọc, "
+        "Gemini AI sẽ gom thành bài viết chi tiết."
+    )
 
-# ==================== CONG CU 1 ====================
-if "Công cụ 1" in tool_choice:
-    st.markdown("## 🧹 Công cụ 1: Lọc & Gom từ khóa Semantic")
-    st.markdown("Upload file CSV từ Ahrefs, AI sẽ lọc rác và gom nhóm từ khóa.")
+    api_key, batch_size = render_api_config()
 
-    col_upload, col_config = st.columns([1, 1])
+    st.markdown("---")
+    st.markdown("### 📁 Nguồn dữ liệu đầu vào")
 
-    with col_upload:
-        st.markdown("### 📁 Upload File")
-        uploaded_file = st.file_uploader(
-            "Chọn file CSV từ Ahrefs", type=["csv"], key="tool1_upload"
+    data_source = st.radio(
+        "Chọn nguồn dữ liệu",
+        options=[
+            "📤 Upload file Excel mới",
+            "♻️ Dùng kết quả từ Công cụ 1"
+        ],
+        index=0,
+        horizontal=True,
+    )
+
+    df_for_tool2 = None
+
+    if "Upload" in data_source:
+        uploaded_excel = st.file_uploader(
+            "Chọn file Excel (cần có cột Từ khóa và Volume)",
+            type=["xlsx", "xls"],
+            key="tool2_upload"
         )
-
-    with col_config:
-        st.markdown("### 🎯 Cấu hình hạt giống")
-        target_input = st.text_area(
-            "🎯 Hạt giống MỤC TIÊU (mỗi dòng 1 từ)",
-            value="kế toán\nhóa đơn",
-            height=100,
-        )
-        noise_default = (
-            "học sinh\nsinh viên\ngiải trí\nmạng xã hội\nfacebook\n"
-            "gmail\ngame\nphim ảnh\nhoa\nhack\nlừa đảo\n"
-            "tải nhạc\nmua sắm\nđời sống\nnông nghiệp"
-        )
-        noise_input = st.text_area(
-            "🚫 Hạt giống NHIỄU (mỗi dòng 1 từ)",
-            value=noise_default,
-            height=150,
-        )
-
-    with st.expander("⚙️ Tham số nâng cao", expanded=False):
-        adv1, adv2 = st.columns(2)
-        with adv1:
-            distance_threshold = st.slider(
-                "Ngưỡng khoảng cách gom nhóm",
-                min_value=0.1, max_value=0.8, value=0.35, step=0.05
+        if uploaded_excel is not None:
+            try:
+                try:
+                    df_for_tool2 = pd.read_excel(
+                        uploaded_excel,
+                        sheet_name="Content Map"
+                    )
+                except Exception:
+                    df_for_tool2 = pd.read_excel(uploaded_excel)
+                st.success(
+                    "✅ Đã đọc file: **"
+                    + str(len(df_for_tool2))
+                    + "** dòng"
+                )
+                with st.expander(
+                    "👀 Xem trước dữ liệu", expanded=False
+                ):
+                    st.dataframe(df_for_tool2.head(10))
+            except Exception as e:
+                st.error("❌ Không thể đọc file: " + str(e))
+    else:
+        if st.session_state.tool1_result is not None:
+            df_for_tool2 = st.session_state.tool1_result.copy()
+            st.success(
+                "✅ Đã lấy kết quả từ Công cụ 1: **"
+                + str(len(df_for_tool2)) + "** dòng"
             )
-        with adv2:
-            margin = st.slider(
-                "Biên độ an toàn (Margin)",
-                min_value=0.0, max_value=0.2, value=0.05, step=0.01
+            with st.expander(
+                "👀 Xem trước dữ liệu", expanded=False
+            ):
+                st.dataframe(df_for_tool2.head(10))
+        else:
+            st.warning(
+                "⚠️ Chưa có kết quả từ Công cụ 1. "
+                "Hãy chạy Công cụ 1 trước hoặc upload file."
             )
 
     st.markdown("---")
 
-    if uploaded_file is not None:
-        if st.button("🚀 Bắt đầu lọc & gom từ khóa", type="primary", use_container_width=True):
-            target_seeds = [s.strip() for s in target_input.strip().split("\n") if s.strip()]
-            noise_seeds = [s.strip() for s in noise_input.strip().split("\n") if s.strip()]
-            if not target_seeds:
+    if df_for_tool2 is not None and api_key is not None:
+        if st.button(
+            "🤖 Bắt đầu gom bài viết bằng AI",
+            type="primary",
+            use_container_width=True
+        ):
+            with st.spinner("Đang xử lý với Gemini AI..."):
+                df_tool2_result = run_tool2(
+                    df_for_tool2, api_key, batch_size
+                )
+            if df_tool2_result is not None:
+                st.session_state.tool2_result = df_tool2_result
+
+    if st.session_state.tool2_result is not None:
+        render_tool2_result(st.session_state.tool2_result)
+
+
+# ============================================================
+# GIAO DIEN PIPELINE
+# ============================================================
+if "Pipeline" in tool_choice:
+    st.markdown("## 🔄 Pipeline: Lọc từ khóa + Gom bài viết")
+    st.markdown(
+        "Upload file CSV, chạy Công cụ 1 (lọc & gom) "
+        "rồi tự động chuyển sang Công cụ 2 (Gemini AI)."
+    )
+
+    st.markdown("### 📁 Bước 1: Upload & Cấu hình Công cụ 1")
+
+    p_col1, p_col2 = st.columns([1, 1])
+
+    with p_col1:
+        p_uploaded = st.file_uploader(
+            "Chọn file CSV từ Ahrefs",
+            type=["csv"],
+            key="pipeline_upload"
+        )
+
+    with p_col2:
+        p_target = st.text_area(
+            "🎯 Hạt giống MỤC TIÊU",
+            value="kế toán\nhóa đơn",
+            height=80,
+            key="p_target"
+        )
+        p_noise_default = (
+            "học sinh\nsinh viên\ngiải trí\n"
+            "mạng xã hội\nfacebook\ngmail\n"
+            "game\nphim ảnh\nhoa\nhack\n"
+            "lừa đảo\ntải nhạc\nmua sắm\n"
+            "đời sống\nnông nghiệp"
+        )
+        p_noise = st.text_area(
+            "🚫 Hạt giống NHIỄU",
+            value=p_noise_default,
+            height=120,
+            key="p_noise"
+        )
+
+    with st.expander("⚙️ Tham số nâng cao", expanded=False):
+        pp1, pp2 = st.columns(2)
+        with pp1:
+            p_dist = st.slider(
+                "Ngưỡng gom nhóm",
+                min_value=0.1,
+                max_value=0.8,
+                value=0.35,
+                step=0.05,
+                key="p_dist"
+            )
+        with pp2:
+            p_margin = st.slider(
+                "Biên độ an toàn",
+                min_value=0.0,
+                max_value=0.2,
+                value=0.05,
+                step=0.01,
+                key="p_margin"
+            )
+
+    st.markdown("---")
+    st.markdown("### 🔑 Bước 2: Cấu hình Gemini API")
+    p_api_key, p_batch_size = render_api_config()
+
+    st.markdown("---")
+
+    if p_uploaded is not None and p_api_key is not None:
+        if st.button(
+            "🚀 Chạy Pipeline (Công cụ 1 → Công cụ 2)",
+            type="primary",
+            use_container_width=True
+        ):
+            p_target_seeds = [
+                s.strip()
+                for s in p_target.strip().split("\n")
+                if s.strip()
+            ]
+            p_noise_seeds = [
+                s.strip()
+                for s in p_noise.strip().split("\n")
+                if s.strip()
+            ]
+
+            if not p_target_seeds:
                 st.error("❌ Nhập ít nhất 1 hạt giống mục tiêu!")
             else:
-                with st.spinner("Đang xử lý..."):
+                st.markdown("#### 🧹 Đang chạy Công cụ 1...")
+                with st.spinner("Công cụ 1 đang xử lý..."):
                     df_result, df_trash = run_tool1(
-                        uploaded_file, target_seeds, noise_seeds,
-                        distance_threshold, margin
+                        p_uploaded,
+                        p_target_seeds,
+                        p_noise_seeds,
+                        p_dist,
+                        p_margin
                     )
+
                 if df_result is not None:
                     st.session_state.tool1_result = df_result
                     st.session_state.tool1_trash = df_trash
 
-    if st.session_state.tool1_result is not None:
-        st.markdown("### 📊 Kết quả")
-        df_res = st.session_state.tool1_result
-        df_tr = st.session_state.tool1_trash
+                    excel_bytes_1 = to_excel_bytes(
+                        df_result, df_trash
+                    )
+                    st.download_button(
+                        label=(
+                            "📥 Tải kết quả Công cụ 1 (Excel)"
+                        ),
+                        data=excel_bytes_1,
+                        file_name="Pipeline_Step1_Semantic.xlsx",
+                        mime=(
+                            "application/vnd.openxmlformats-"
+                            "officedocument.spreadsheetml.sheet"
+                        ),
+                        use_container_width=True
+                    )
 
-        num_clusters = df_res["Chủ Đề (Tên Bài)"].nunique()
-        m1, m2, m3 = st.columns(3)
-        m1.metric("📝 Số nhóm bài", str(num_clusters))
-        m2.metric("✅ Từ khóa giữ", str(len(df_res)))
-        m3.metric("🗑️ Từ khóa loại", str(len(df_tr) if df_tr is not None else 0))
+                    st.markdown("---")
+                    st.markdown(
+                        "#### 🤖 Đang chạy Công cụ 2 "
+                        "(Gemini AI)..."
+                    )
+                    with st.spinner(
+                        "Công cụ 2 đang xử lý với Gemini..."
+                    ):
+                        df_tool2_result = run_tool2(
+                            df_result,
+                            p_api_key,
+                            p_batch_size
+                        )
 
-        tab1, tab2 = st.tabs(["📗 Content Map", "🗑️ Từ khóa bị loại"])
-        with tab1:
-            st.dataframe(df_res, use_container_width=True, height=400)
-        with tab2:
-            if df_
+                    if df_tool2_result is not None:
+                        st.session_state.tool2_result = (
+                            df_tool2_result
+                        )
+                        render_tool2_result(df_tool2_result)
+
+    elif p_uploaded is None:
+        st.info("📁 Vui lòng upload file CSV để bắt đầu.")
+
+# === KET THUC FILE app.py ===
