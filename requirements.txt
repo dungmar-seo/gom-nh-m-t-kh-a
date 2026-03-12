@@ -1,6 +1,7 @@
 streamlit
 pandas
+numpy
 openpyxl
-google-generativeai
 sentence-transformers
 scikit-learn
+google-generativeai
